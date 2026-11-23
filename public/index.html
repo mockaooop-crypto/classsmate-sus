@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CLASSMATE SUS</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101827;color:#f7f8fb;font-family:Arial,'Apple SD Gothic Neo',sans-serif}
+header{padding:18px 22px;border-bottom:1px solid #344054;display:flex;justify-content:space-between;align-items:center}
+.logo{font-weight:1000;letter-spacing:2px;font-size:22px}.logo span{color:#ff5364}
+main{max-width:960px;margin:28px auto;padding:0 16px}.panel{background:#1c293b;border:1px solid #34445b;border-radius:18px;padding:22px;margin-bottom:16px;box-shadow:0 10px 30px #0003}
+h1{font-size:clamp(28px,5vw,44px);margin:8px 0}.muted{color:#aab6c8}.row{display:flex;gap:10px;flex-wrap:wrap}
+input{background:#101827;border:1px solid #506078;color:white;padding:14px;border-radius:10px;font-size:16px;min-width:0;flex:1}
+button{border:0;border-radius:10px;padding:13px 18px;font-weight:800;font-size:15px;cursor:pointer;background:#ff5364;color:white}
+button.secondary{background:#34445b;color:white}button:disabled{opacity:.4;cursor:not-allowed}
+#game{display:none}.players{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-top:16px}
+.player{background:#111d2c;padding:12px;border-radius:12px;display:flex;gap:10px;align-items:center}.dot{width:22px;height:22px;border-radius:50%;background:#ff5364;border:3px solid #ffffff55}
+#notice{min-height:24px;color:#ffd36a;margin:10px 0}.pill{display:inline-block;background:#34445b;padding:6px 10px;border-radius:20px;font-size:12px}
+#map{height:260px;border-radius:14px;background-color:#29394c;background-image:linear-gradient(#ffffff0b 1px,transparent 1px),linear-gradient(90deg,#ffffff0b 1px,transparent 1px);background-size:32px 32px;position:relative;overflow:hidden;margin:14px 0}
+.room{position:absolute;border:3px solid #65768c;background:#40536b;border-radius:12px;display:grid;place-items:center;color:#dbe5f2;font-weight:bold}
+.room.a{left:5%;top:12%;width:28%;height:35%}.room.b{right:5%;top:12%;width:28%;height:35%}.room.c{left:35%;bottom:8%;width:30%;height:38%}
+#crewTasks{display:flex;gap:8px;flex-wrap:wrap}#role{font-size:20px;font-weight:900;margin-top:10px}
+@media(max-width:560px){header{padding:14px}.panel{padding:16px}main{margin:18px auto}}
+</style></head><body>
+<header><div class="logo">CLASSMATE <span>SUS</span></div><span class="pill">ONLINE · UP TO 20</span></header>
+<main>
+<section id="home" class="panel">
+ <div class="pill">🚀 SCHOOL EDITION</div><h1>누가 <span style="color:#ff5364">SUS</span>일까?</h1>
+ <p class="muted">친구들과 같은 방에 모여 크루원을 찾고 미션을 완료하세요.</p>
+ <div class="row"><input id="name" maxlength="14" placeholder="닉네임"><button id="create">방 만들기</button></div>
+ <div class="row" style="margin-top:10px"><input id="code" maxlength="4" placeholder="방 코드 (4자리)"><button class="secondary" id="join">참가하기</button></div>
+ <p id="notice"></p><small class="muted">최대 20명 · 최소 4명부터 시작 · 친구에게 방 코드를 공유하세요.</small>
+</section>
+<section id="game" class="panel">
+ <div class="row" style="justify-content:space-between;align-items:center"><div><span class="pill">ROOM CODE</span><h1 id="roomCode">----</h1></div><button class="secondary" id="copy">코드 복사</button></div>
+ <p class="muted" id="status">친구들을 기다리는 중...</p><div class="players" id="players"></div>
+ <div id="role"></div>
+ <div id="playArea" style="display:none">
+  <div id="map"><div class="room a">CAFETERIA</div><div class="room b">ENGINE</div><div class="room c">STORAGE</div></div>
+  <p class="muted">크루원은 미션을 완료하고, 임포스터는 정체를 들키지 않도록 하세요.</p>
+  <div id="crewTasks"><button id="task">🔧 미션 완료</button><button class="secondary" id="meeting">🚨 긴급 회의</button></div>
+  <div id="voteArea"></div>
+ </div>
+ <button id="start" style="margin-top:18px">게임 시작</button>
+</section>
+</main>
+<script src="/socket.io/socket.io.js"></script><script>
+const socket=io();let room=null,isHost=false,myRole=null,latest=null;
+const $=id=>document.getElementById(id);
+function note(t){$('notice').textContent=t}
+function enter(){ $('home').style.display='none';$('game').style.display='block';}
+$('create').onclick=()=>socket.emit('create',{name:$('name').value});
+$('join').onclick=()=>socket.emit('join',{name:$('name').value,code:$('code').value});
+$('copy').onclick=()=>navigator.clipboard?.writeText(room).then(()=>note('방 코드를 복사했어요!'));
+$('start').onclick=()=>socket.emit('start');
+$('task').onclick=()=>socket.emit('task');
+$('meeting').onclick=()=>socket.emit('meeting');
+socket.on('joined',d=>{room=d.code;isHost=d.host;enter();$('roomCode').textContent=room;$('start').style.display=isHost?'inline-block':'none';note('친구들에게 방 코드를 알려주세요!');});
+socket.on('notice',note);
+socket.on('privateRole',d=>{myRole=d.role;$('role').textContent=myRole==='impostor'?'🔴 당신은 임포스터입니다!':'🟦 당신은 크루원입니다!';});
+socket.on('room',r=>{
+ latest=r;$('roomCode').textContent=r.code;
+ $('players').innerHTML=r.players.map(p=>`<div class="player"><i class="dot"></i><span>${esc(p.name)} ${p.alive?'':'(탈락)'}</span></div>`).join('');
+ $('status').textContent=r.phase==='lobby'?`대기 중 · ${r.players.length}/20명`:r.phase==='playing'?'게임 진행 중':r.phase==='meeting'?'회의 및 투표 중':r.phase==='crewWin'?'🎉 크루원 승리!':r.phase==='impostorWin'?'🔴 임포스터 승리!':'';
+ $('start').style.display=(isHost&&r.phase==='lobby')?'inline-block':'none';
+ $('playArea').style.display=r.started?'block':'none';
+ if(r.phase==='meeting') showVotes(r); else $('voteArea').innerHTML='';
+ if(r.phase==='crewWin'||r.phase==='impostorWin') $('role').textContent=r.phase==='crewWin'?'🎉 크루원 팀 승리!':'🔴 임포스터 팀 승리!';
+});
+function showVotes(r){
+ const alive=r.players.filter(p=>p.alive);
+ $('voteArea').innerHTML='<h3>누가 수상한가요?</h3><div class="row">'+alive.map(p=>`<button class="secondary" data-v="${p.id}">${esc(p.name)}</button>`).join('')+'<button data-v="skip">건너뛰기</button></div>';
+ $('voteArea').querySelectorAll('button').forEach(b=>b.onclick=()=>socket.emit('vote',{target:b.dataset.v}));
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+</script></body></html>
